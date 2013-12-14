@@ -10,3 +10,5 @@ pom.xml.asc
 .lein-failures
 .lein-plugins
 .lein-repl-history
+/modules/tree-config/target/provided/stale/extract-native.dependencies
+/modules/tree-config/target

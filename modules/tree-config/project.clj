@@ -1,4 +1,4 @@
-(defproject config-tree "0.1.0-SNAPSHOT"
+(defproject tree-config "0.1.0-SNAPSHOT"
   :description "Hierarchical configuration library for clojure"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"

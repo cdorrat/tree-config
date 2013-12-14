@@ -1,4 +1,4 @@
-(ns config-tree.core
+(ns tree-config.core
   (:require 
    [clojure.tools.logging :as log]
    [clojure.string :as str]

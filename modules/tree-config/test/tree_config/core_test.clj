@@ -1,6 +1,6 @@
-(ns config-tree.core-test
+(ns tree-config.core-test
   (:require [clojure.test :refer :all]
-            [config-tree.core :refer :all]))
+            [tree-config.core :refer :all]))
 
 
 

@@ -1,6 +1,6 @@
-(ns config-tree-lein.lein-config
+(ns tree-config-lein.lein-config
   (:require [leiningen.core.project :as lp]
-            [config-tree.core :as ct]))
+            [tree-config.core :as ct]))
 
 (def ^:const default-settings {:config-key :config
                                :config-file "project.clj"})
