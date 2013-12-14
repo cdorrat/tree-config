@@ -4,7 +4,8 @@
    [clojure.string :as str]
    [clojure.edn :as edn]
    [clojure.java.io :as io]
-   [clojure.data.codec.base64 :as b64])
+   [clojure.data.codec.base64 :as b64]
+   [clojure.walk :as walk])
   (:import 
    [java.net Inet4Address InetAddress NetworkInterface InterfaceAddress]
    [java.util Properties Arrays]
@@ -142,12 +143,19 @@ If no address is suplied it will check all of the addresses of the local machine
   ([secret-key val]
      (str enc-marker (des-crypt secret-key val))))
 
+ (defn- decrypt-map-leaves [secret-key m]
+   (walk/postwalk (fn [v]
+                    (if (is-encrypted? v)
+                      (decode-value secret-key v)
+                      v)) m))
+
 (defn extract-value 
   ([val] (extract-value  (:enc-key default-settings-vals) val))
   ([secret-key val]
-     (if (is-encrypted? val)
-       (decode-value secret-key val)
-       val)))
+     (cond 
+      (is-encrypted? val) (decode-value secret-key val)
+      (map? val) (decrypt-map-leaves secret-key val)
+      :else val)))
     
 ;; ===================================================================================================
 (defprotocol SettingsUtilsProtocol
@@ -323,7 +331,7 @@ Each map has the following keys:
 ;; ===================================================================================================
 ;; edn config data                
 
-(defn edn-config 
+(defn edn-settings 
   "Config read from a map in edn format. The file should contain a map in edn format, the top level keys 
 will be used as the properties and can optionally contain env and app-name sepcifiers, 
 eg. {:global.prop \"a prop visible to everyone\"

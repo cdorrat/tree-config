@@ -129,7 +129,7 @@
 
 (deftest edn-test 
   (let [ get-prop (fn [env app key] 
-                    (get (edn-config "test.edn" :env env :app-name app) key))]
+                    (get (edn-settings "test.edn" :env env :app-name app) key))]
     (are [env app key expected] (= expected (get-prop env app key))
          :dev  nil :global.prop "a prop visible to everyone"
          :dev :myapp :app.prop "prop only visible to myapp"
@@ -139,21 +139,21 @@
 
 (deftest edn-file-missing
   (try 
-    (edn-config "i dont exist.edn" :throw-on-failure? true)
+    (edn-settings "i dont exist.edn" :throw-on-failure? true)
     (is false "expected an exception on missing edn file")
     (catch Exception e))
 
-  (let [s (edn-config "i dont exist.edn" :throw-on-failure? false)]
+  (let [s (edn-settings "i dont exist.edn" :throw-on-failure? false)]
     (is (empty? s))))
       
 
 (deftest edn-invalid-file
   (try 
-    (edn-config "test_bad.edn" :throw-on-failure? true)
+    (edn-settings "test_bad.edn" :throw-on-failure? true)
     (is false "expected an exception on missing edn file")
     (catch Exception e))
 
-  (let [s (edn-config "test_bad.edn" :throw-on-failure? false)]
+  (let [s (edn-settings "test_bad.edn" :throw-on-failure? false)]
     (is (empty? s))))
   
 
