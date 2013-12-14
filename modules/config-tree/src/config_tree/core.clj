@@ -14,9 +14,9 @@
    [javax.naming InitialContext]))
  
  
-(def env-subnets (atom  [[:dev "10.1.1.1/24" "172.18.39.86/25"]
-                         [:test "10.0.1.0/24"]
-                         [:prod "10.0.2.0/24"]]))
+;; (def env-subnets (atom  [[:dev "10.1.1.1/24" "172.18.39.86/25"]
+;;                          [:test "10.0.1.0/24"]
+;;                          [:prod "10.0.2.0/24"]]))
 
 
 ;; ===================================================================================================
@@ -57,21 +57,38 @@ If no address is suplied it will check all of the addresses of the local machine
   [val]
   (str/join "." (map #(format "%d" (bit-and 0xff (bit-shift-right val (* % 8)))) (range 3 -1 -1))))
 
-(def ^{:private true} get-net-env
+(defn- get-net-env
+  [env-subnets]
+  (some (fn [[env & subnets]]
+          (when (some in-subnet? subnets)
+            env))
+        env-subnets))
+
+(def get-env 
+  "determine the environment we're running in as follows:
+   1. look for a java property called \"SETTINGS_ENV\"
+   2. look for an environmen tvariable called \"SETTINGS_ENV\"
+   3. determine the environment based on the ipv4 subnets in the :env-subnets config property
+   4. default to :dev"
   (memoize
-   #(some (fn [[env & subnets]]
-            (when (some in-subnet? subnets)
-              env))
-          @env-subnets)))
+   (fn [settings]
+     (or
+      (keyword (System/getProperty "SETTINGS_ENV"))
+      (some-> (System/getenv) (.get "SETTINGS_ENV") keyword)
+      (get-net-env (:env-subnets settings))
+      :dev))))
 
-(defn get-env []
-  (get-net-env))
-
-(def default-settings 
-  {:env (get-env)
-   :app-name nil
+(def default-settings-vals 
+  {:app-name nil
    :enc-key "^a not so secret key7"
-   :throw-on-failure? true})
+   :throw-on-failure? true
+   :env-subnets []})
+
+(defn default-settings [overrides]
+  (let [merged (merge default-settings-vals overrides)]
+    (if (:env overrides)
+      merged
+      (assoc merged :env (get-env merged)))))  
 
 (defn- app-name [config]
   (when-let [n (:app-name config)]
@@ -121,12 +138,12 @@ If no address is suplied it will check all of the addresses of the local machine
   (des-decrypt enc-key (.substring val (count enc-marker))))
 
 (defn encode-value 
-  ([val] (encode-value (:enc-key default-settings) val))
+  ([val] (encode-value (:enc-key default-settings-vals) val))
   ([secret-key val]
      (str enc-marker (des-crypt secret-key val))))
 
 (defn extract-value 
-  ([val] (extract-value  (:enc-key default-settings) val))
+  ([val] (extract-value  (:enc-key default-settings-vals) val))
   ([secret-key val]
      (if (is-encrypted? val)
        (decode-value secret-key val)
@@ -157,19 +174,20 @@ If no address is suplied it will check all of the addresses of the local machine
   (for [e [env nil] app (get-prop-prefixes app-name)]
     [e app key-name]))
 
-;;impl
 (defn find-key-with-value
   "return the most specific [env app-name key-name] tuple that has a value"
   [impl key env app-name]
   (some #(when (apply has? impl %) %)
         (keys-to-search env app-name key)))
-;;impl
+
 (defn fetch-value 
   "lookup a value, searching ancestors and decrypting values as necessary"
   [impl config key & default]
   (or
    (when-let [found-app (find-key-with-value impl key (:env config) (app-name config))]
-     (extract-value (:enc-key config) (apply lookup impl found-app)))
+     (let [v (extract-value (:enc-key config) (apply lookup impl found-app))]
+       (log/debug "loaded config value: " (:env config) "/" (app-name config) "/" key " = " v)
+       v))
    (first default)))
 
 (defmacro defsettings 
@@ -261,7 +279,7 @@ Each map has the following keys:
               (distinct (map #(-> % key-name keyword) (keys m)))))
 
 (defn map-settings [m & {:as opts}]
-  (MapSettings. (merge default-settings opts) m))
+  (MapSettings. (default-settings opts) m))
     
 ;; ===================================================================================================
 ;; java properties file implementation
@@ -291,7 +309,7 @@ Each map has the following keys:
       
 
 (defn properties-settings [file-uri & {:as opts}]
-  (let [settings (merge default-settings opts)        
+  (let [settings (default-settings opts)        
         is (find-stream file-uri (:throw-on-failure? settings))]
       (if is
         (with-open [is is]
@@ -322,7 +340,7 @@ Options:
    :enc-key     - the key to use when encrypting & decrypting data"
 
   [file-uri & {:as opts}]
-  (let [settings (merge default-settings opts)
+  (let [settings (default-settings opts)
         failed-loading (fn [& msgs]
                           (log/warn "failed to load edn settings from: " file-uri " " msgs)
                           (map-settings {}))
@@ -330,7 +348,7 @@ Options:
       (if is
         (with-open [is (java.io.PushbackReader. (io/reader is))]
           (try 
-            (apply map-settings (edn/read is) (flatten (seq settings)))
+            (apply map-settings (edn/read is) (interleave (keys settings) (vals settings)))
             (catch Exception e
               (if (:throw-on-failure? settings)
                 (throw e)
@@ -347,7 +365,7 @@ Options:
 
                        
 (defn java-prop-settings [& opts]
-  (PropertiesSettings.  (merge default-settings opts)
+  (PropertiesSettings.  (default-settings opts)
                         (System/getProperties)))
 
 
@@ -364,4 +382,4 @@ Options:
               (into #{} (mapcat #(prop-names % env app-name) (reverse delegates)))))
 
 (defn chained-settings [& delegates]
-  (ChainedSettings. default-settings delegates))
+  (ChainedSettings. default-settings-vals delegates))

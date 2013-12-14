@@ -16,5 +16,5 @@ Options (all optional):
   [& {:as opts}]  
   (let [settings (merge default-settings opts)]
     (apply ct/map-settings (get (lp/read (:config-file settings)) (:config-key settings)) 
-           (flatten (seq opts)))))
+           (interleave (keys opts) (vals opts)))))
 
