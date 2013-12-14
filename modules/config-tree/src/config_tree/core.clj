@@ -1,6 +1,8 @@
 (ns config-tree.core
   (:require 
+   [clojure.tools.logging :as log]
    [clojure.string :as str]
+   [clojure.edn :as edn]
    [clojure.java.io :as io]
    [clojure.data.codec.base64 :as b64])
   (:import 
@@ -68,7 +70,8 @@ If no address is suplied it will check all of the addresses of the local machine
 (def default-settings 
   {:env (get-env)
    :app-name nil
-   :enc-key "^a not so secret key7"})
+   :enc-key "^a not so secret key7"
+   :throw-on-failure? true})
 
 (defn- app-name [config]
   (when-let [n (:app-name config)]
@@ -196,9 +199,10 @@ If no address is suplied it will check all of the addresses of the local machine
 
        clojure.lang.Seqable
        (seq [this#]
-         (remove #(-> % second (= ::not-found))
-                 (map #(.entryAt ^clojure.lang.Associative this# %)
-                      (prop-names this# (:env ~config) (app-name ~config))))))))
+         (seq
+          (remove #(-> % second (= ::not-found))
+                  (map #(.entryAt ^clojure.lang.Associative this# %)
+                       (prop-names this# (:env ~config) (app-name ~config)))))))))
 
 (defn prop-details 
   "given a properties instace return a seq of maps with one entry per property.
@@ -243,6 +247,21 @@ Each map has the following keys:
     (if (>= sep-idx 0)
       (.substring str-k (inc sep-idx))
       str-k)))
+
+;; ===================================================================================================
+;; in memory map based implementation
+
+(defsettings MapSettings [config m]
+  SettingsProtocol
+  (has? [_ env app-name key]
+        (contains? m (keyword (prop-key-name env app-name key))))
+  (lookup [settings env app-name key]
+          (get m (keyword (prop-key-name env app-name key))))
+  (prop-names [settings env app-name]
+              (distinct (map #(-> % key-name keyword) (keys m)))))
+
+(defn map-settings [m & {:as opts}]
+  (MapSettings. (merge default-settings opts) m))
     
 ;; ===================================================================================================
 ;; java properties file implementation
@@ -261,31 +280,62 @@ Each map has the following keys:
   "Try to open a file in order of:
   a). classpath
   b). any uri nuderstood by clojure.java.io/input-stream"
-  [uri]
+  [uri throw-on-failure?]
   (if-let [is (io/resource uri)]
     (io/input-stream is)
-    (io/input-stream uri)))
+    (try 
+      (io/input-stream uri)
+      (catch Exception e
+        (when throw-on-failure?
+          (throw e))))))
+      
 
 (defn properties-settings [file-uri & {:as opts}]
-  (with-open [is (find-stream file-uri)]
-    (PropertiesSettings. (merge default-settings opts)
-                         (doto (Properties.) (.load is)))))
+  (let [settings (merge default-settings opts)        
+        is (find-stream file-uri (:throw-on-failure? settings))]
+      (if is
+        (with-open [is is]
+          (PropertiesSettings. settings (doto (Properties.) (.load is))))
+        (do
+          (log/warn "unable to load settings from property file: " file-uri)
+          (map-settings {})))))
+          
+       
 
 ;; ===================================================================================================
-;; in memory map based implementation
+;; edn config data                
 
-(defsettings MapSettings [config m]
-  SettingsProtocol
-  (has? [_ env app-name key]
-        (contains? m (keyword (prop-key-name env app-name key))))
-  (lookup [settings env app-name key]
-          (get m (keyword (prop-key-name env app-name key))))
-  (prop-names [settings env app-name]
-              (distinct (map #(-> % key-name keyword) (keys m)))))
+(defn edn-config 
+  "Config read from a map in edn format. The file should contain a map in edn format, the top level keys 
+will be used as the properties and can optionally contain env and app-name sepcifiers, 
+eg. {:global.prop \"a prop visible to everyone\"
+     :myapp/app.prop \"prop only visible to myapp\"
+     :dev/myapp/dev.app.prop \"prop visible to myapp in the dev environment\"
+     :dev//dev.prop \"property visible ot all apps in dev env\"}
+Params:
+  file-uri - location of the edn file, first looked up in classpath then as a clojure.java.io/input-stream uri
+Options:
+   :config-key  - the project.clj key to get config values from (default :config)
+   :config-file - the leiningen project file to read (default \"project.clj\")
+   :env         - the environment
+   :app-name    - the app name (keyword or string)
+   :enc-key     - the key to use when encrypting & decrypting data"
 
-(defn map-settings [m & {:as opts}]
-  (MapSettings. (merge default-settings opts) m))
-                
+  [file-uri & {:as opts}]
+  (let [settings (merge default-settings opts)
+        failed-loading (fn [& msgs]
+                          (log/warn "failed to load edn settings from: " file-uri " " msgs)
+                          (map-settings {}))
+        is (find-stream file-uri (:throw-on-failure? settings))]
+      (if is
+        (with-open [is (java.io.PushbackReader. (io/reader is))]
+          (try 
+            (apply map-settings (edn/read is) (flatten (seq settings)))
+            (catch Exception e
+              (if (:throw-on-failure? settings)
+                (throw e)
+                (failed-loading (.getMessage e))))))
+        (failed-loading))))
 
 ;; ===================================================================================================
 ;; os & environment settings
@@ -293,7 +343,7 @@ Each map has the following keys:
 (defn env-settings [& opts]
   (let [env (into {} (for [[k v] (System/getenv)]
                        [(keyword k) v]))]
-    (apply map-settings env (flatten (seq opts)))))
+    (apply map-settings env opts)))
 
                        
 (defn java-prop-settings [& opts]

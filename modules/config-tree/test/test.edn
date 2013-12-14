@@ -1,0 +1,5 @@
+;; sample edn config file
+{:global.prop "a prop visible to everyone"
+ :myapp/app.prop "prop only visible to myapp"
+ :dev/myapp/dev.app.prop "prop visible to myapp in the dev environment"
+ :dev//dev.prop "property visible ot all apps in dev env"}

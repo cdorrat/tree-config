@@ -2,6 +2,8 @@
   (:require [clojure.test :refer :all]
             [config-tree.core :refer :all]))
 
+
+
 (deftest scoped-name-resolution
   ;; simple.prop             - a prop name only, applied to all applications & environments
   ;; myapp/prop.name         - this property is only visible ot the application myapp and its children (myapp.child)
@@ -115,7 +117,43 @@
          :test-only nil)
     (is (= 6 (count s)))))
 
+(deftest prop-file-missing-no-throw                               
+  (let [s (properties-settings "i dont exist.properties" :throw-on-failure? false)]
+    ;; we'd also expect it to log a warning but we wont test that..
+    (is (= 0 (count s)))))
+
 (deftest java-props-test
   (let [s (java-prop-settings)]
     (is (not (zero? (count  s))))
     (is (= (:os.name s) (.. (System/getProperties) (get "os.name"))))))
+
+(deftest edn-test 
+  (let [ get-prop (fn [env app key] 
+                    (get (edn-config "test.edn" :env env :app-name app) key))]
+    (are [env app key expected] (= expected (get-prop env app key))
+         :dev  nil :global.prop "a prop visible to everyone"
+         :dev :myapp :app.prop "prop only visible to myapp"
+         :dev :myapp :dev.app.prop "prop visible to myapp in the dev environment"
+         :dev :otherapp :dev.app.prop nil         
+         :dev :otherapp :dev.prop "property visible ot all apps in dev env")))
+
+(deftest edn-file-missing
+  (try 
+    (edn-config "i dont exist.edn" :throw-on-failure? true)
+    (is false "expected an exception on missing edn file")
+    (catch Exception e))
+
+  (let [s (edn-config "i dont exist.edn" :throw-on-failure? false)]
+    (is (empty? s))))
+      
+
+(deftest edn-invalid-file
+  (try 
+    (edn-config "test_bad.edn" :throw-on-failure? true)
+    (is false "expected an exception on missing edn file")
+    (catch Exception e))
+
+  (let [s (edn-config "test_bad.edn" :throw-on-failure? false)]
+    (is (empty? s))))
+  
+
