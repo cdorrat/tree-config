@@ -13,3 +13,4 @@ pom.xml.asc
 /modules/tree-config/target/provided/stale/extract-native.dependencies
 /modules/tree-config/target
 /modules/tree-config/.nrepl-port
+/modules/tree-config-lein/.nrepl-port

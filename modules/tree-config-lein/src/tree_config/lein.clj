@@ -14,7 +14,7 @@ Options (all optional):
    :app-name    - the app name (keyword or string)
    :enc-key     - the key to use when encrypting & decrypting data"
   [& {:as opts}]  
-  (let [settings (merge default-settings opts)]
+  (let [settings (merge default-settings  (assoc opts :store-name "lein"))]
     (apply ct/map-settings (get (lp/read (:config-file settings)) (:config-key settings)) 
-           (interleave (keys opts) (vals opts)))))
+           (interleave (keys settings) (vals settings)))))
 
