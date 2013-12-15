@@ -128,7 +128,7 @@ If no address is suplied it will check all of the addresses of the local machine
     (try 
       (String. (.doFinal cipher enc-val))
       (catch Exception e
-        ;; TODO - log an error here
+        (log/error e "failed decoding encrypted config property: " val)
         nil))))
 
 (defn- is-encrypted? [val]
@@ -165,7 +165,8 @@ If no address is suplied it will check all of the addresses of the local machine
   "This is the protocol describing basic settings capabilities"
   (has? [settings env app-name key] "return true if the specified setting exists")
   (lookup [settings env app-name key] "retrieve the value associated with the setting if it exists")
-  (prop-names [settings env app-name] "returns a sequence of property names"))
+  (prop-names [settings env app-name] "returns a sequence of property names")
+  (store-name [settings] "return the name of this config store"))
 
 (defn get-prop-prefixes 
   "return a list of prefixes that may have properties for an app from highest to lowest priority"
@@ -194,7 +195,9 @@ If no address is suplied it will check all of the addresses of the local machine
   (or
    (when-let [found-app (find-key-with-value impl key (:env config) (app-name config))]
      (let [v (extract-value (:enc-key config) (apply lookup impl found-app))]
-       (log/debug "loaded config value: " (:env config) "/" (app-name config) "/" key " = " v)
+       (when (log/enabled? :debug)
+         (let [{:keys [store env app-name prop-name]} (key-details impl key)]
+           (log/debug (format "loaded config value: %s[%s/%s/%s] = %s " store (str env) (str app-name) (str prop-name) (str v)))))
        v))
    (first default)))
 
@@ -204,10 +207,13 @@ If no address is suplied it will check all of the addresses of the local machine
     `(deftype ~type-name [~@fields]
        ~@specifics
 
-       SettingsUtilsProtocol
-       (key-details [this# key#]
-         (when-let [[env# app-name# prop-name#] (find-key-with-value this# key# (:env ~config) (app-name  ~config))]
-           {:env env# :app-name app-name# :prop-name prop-name#}))
+       ~@(when-not (some #(and (symbol? %) 
+                               (= #'SettingsUtilsProtocol (ns-resolve *ns* %)))
+                          specifics)
+           `(SettingsUtilsProtocol
+             (key-details [this# key#]
+                (when-let [[env# app-name# prop-name#] (find-key-with-value this# key# (:env ~config) (app-name  ~config))]
+                  {:store (store-name this#) :env env# :app-name app-name# :prop-name prop-name#}))))
 
        clojure.lang.ILookup
        (valAt [this# key#]
@@ -284,7 +290,8 @@ Each map has the following keys:
   (lookup [settings env app-name key]
           (get m (keyword (prop-key-name env app-name key))))
   (prop-names [settings env app-name]
-              (distinct (map #(-> % key-name keyword) (keys m)))))
+              (distinct (map #(-> % key-name keyword) (keys m))))
+  (store-name [_] (or (:store-name config) "map-config")))
 
 (defn map-settings [m & {:as opts}]
   (MapSettings. (default-settings opts) m))
@@ -300,7 +307,9 @@ Each map has the following keys:
           (.getProperty props (prop-key-name env app-name key)))
   (prop-names [settings env app-name]
               (distinct (map #(-> % key-name keyword)
-                             (seq (.keySet props))))))
+                             (seq (.keySet props)))))
+  (store-name [_] (or (:store-name config) "prop-file")))
+
 
 (defn- find-stream 
   "Try to open a file in order of:
@@ -317,14 +326,16 @@ Each map has the following keys:
       
 
 (defn properties-settings [file-uri & {:as opts}]
-  (let [settings (default-settings opts)        
+  (let [settings (default-settings opts)
+        store-name (str "prop:" file-uri)
         is (find-stream file-uri (:throw-on-failure? settings))]
       (if is
         (with-open [is is]
-          (PropertiesSettings. settings (doto (Properties.) (.load is))))
+          (PropertiesSettings. (assoc settings :store-name store-name)  
+                               (doto (Properties.) (.load is))))
         (do
           (log/warn "unable to load settings from property file: " file-uri)
-          (map-settings {})))))
+          (map-settings {} :store-name store-name)))))
           
        
 
@@ -348,10 +359,11 @@ Options:
    :enc-key     - the key to use when encrypting & decrypting data"
 
   [file-uri & {:as opts}]
-  (let [settings (default-settings opts)
+  (let [store-name (str "edn:" file-uri)
+        settings (default-settings (assoc opts :store-name store-name))
         failed-loading (fn [& msgs]
                           (log/warn "failed to load edn settings from: " file-uri " " msgs)
-                          (map-settings {}))
+                          (map-settings {} :store-name store-name))
         is (find-stream file-uri (:throw-on-failure? settings))]
       (if is
         (with-open [is (java.io.PushbackReader. (io/reader is))]
@@ -369,11 +381,11 @@ Options:
 (defn env-settings [& opts]
   (let [env (into {} (for [[k v] (System/getenv)]
                        [(keyword k) v]))]
-    (apply map-settings env opts)))
+    (apply map-settings env :store-name "env-settings" opts)))
 
                        
 (defn java-prop-settings [& opts]
-  (PropertiesSettings.  (default-settings opts)
+  (PropertiesSettings.  (default-settings (assoc opts :store-name "java-prop"))
                         (System/getProperties)))
 
 
@@ -387,7 +399,12 @@ Options:
   (lookup [settings env app-name key]
         (some #(lookup % env app-name key) delegates))
   (prop-names [settings env app-name]
-              (into #{} (mapcat #(prop-names % env app-name) (reverse delegates)))))
+              (into #{} (mapcat #(prop-names % env app-name) (reverse delegates))))
+  (store-name [_] "chained-config")
+
+  SettingsUtilsProtocol
+  (key-details [_ key]
+               (first (remove nil? (map #(key-details % key) delegates)))))
 
 (defn chained-settings [& delegates]
   (ChainedSettings. default-settings-vals delegates))
