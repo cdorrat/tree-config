@@ -215,6 +215,11 @@ If no address is suplied it will check all of the addresses of the local machine
                 (when-let [[env# app-name# prop-name#] (find-key-with-value this# key# (:env ~config) (app-name  ~config))]
                   {:store (store-name this#) :env env# :app-name app-name# :prop-name prop-name#}))))
 
+       clojure.lang.IFn
+       (invoke [this#] this#)
+       (invoke [this# key#] (fetch-value this# ~config key#))
+       (applyTo [this# args#] (clojure.lang.AFn/applyToHelper this# args#))
+
        clojure.lang.ILookup
        (valAt [this# key#]
          (fetch-value this# ~config key#))
