@@ -1,4 +1,4 @@
-(ns tree-config-lein.lein-config
+(ns tree-config.lein
   (:require [leiningen.core.project :as lp]
             [tree-config.core :as ct]))
 

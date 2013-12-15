@@ -1,6 +1,6 @@
-(ns tree-config-lein.lein-config-test
+(ns tree-config.lein-test
   (:require [clojure.test :refer :all]
-            [tree-config-lein.lein-config :refer :all]))
+            [tree-config.lein :refer :all]))
 
 (deftest project-clj-test 
   (let [s (lein-settings :config-file "test/test_project.clj" :env :dev :app-name :myapp)]

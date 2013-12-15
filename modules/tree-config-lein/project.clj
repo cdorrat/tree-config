@@ -1,4 +1,4 @@
-(defproject tree-config/lein-config "0.1.0-SNAPSHOT"
+(defproject tree-config/lein "0.1.0-SNAPSHOT"
   :description "tree-config support for reading values from leinening profiles or project files"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
