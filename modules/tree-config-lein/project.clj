@@ -7,4 +7,6 @@
                  [tree-config/tree-config "0.1.0-SNAPSHOT"]
                  [leiningen-core "2.3.4"]]
   :jar-name "tree-config-lein-%s.jar"
+  :scm {:name "git"
+         :url "https://github.com/cdorrat/tree-config.git"}
   :config {:prop-2 "from project.clj"})
