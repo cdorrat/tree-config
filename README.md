@@ -22,7 +22,7 @@ Sample use cases include:
  
 ## Usage
 
-''''clojure
+````clojure
 (require '[tree-config.core :as tc])
 
 (def some-config
@@ -64,7 +64,7 @@ Sample use cases include:
 ;; read the encrypted value back
 (:the-password config-with-secret ) ;; => "my-secret"
 							
-''''
+````
 
 ## Environment Determination
 
@@ -79,11 +79,11 @@ will determined as follows:
 
 Subnets may be sepcified as follows:
 
-''''clojure
+````clojure
 (def env-subnets [[:dev "10.1.1.1/24" "172.18.39.86/25"]
                   [:test "10.0.1.0/24"]
                   [:prod "10.0.2.0/24"]])
-''''
+````
 
 ## License
 
