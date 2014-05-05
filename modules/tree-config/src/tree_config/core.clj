@@ -416,5 +416,8 @@ Options:
   (key-details [_ key]
                (first (remove nil? (map #(key-details % key) delegates)))))
 
-(defn chained-settings [& delegates]
-  (ChainedSettings. default-settings-vals delegates))
+(defn chained-settings 
+  "Return a config instance that returns the first match from a collection of config files.
+  any options will be applied to all the chained settings instances (eg. app-name or env) "
+  [delegates & {:as opts}]
+  (ChainedSettings. (merge default-settings-vals opts) delegates))

@@ -88,13 +88,27 @@
 
 (deftest chained-props-test
   (let [s (chained-settings 
-           (map-settings {:prop1 "p1" :prop2 "p1-again"})
-           (map-settings {:prop1 "hidden" :prop3 "accessible"}))]
+           [(map-settings {:prop1 "p1" :prop2 "p1-again"})
+            (map-settings {:prop1 "hidden" :prop3 "accessible"})])]
     (are [k expected] (= expected (get s k))
          :prop1 "p1"
          :prop2 "p1-again"
          :prop3 "accessible"
          :prop4 nil)))
+
+(deftest chained-props-honour-env
+  (let [s (chained-settings 
+           [(map-settings {:prod//prop1 "visible" :prop1 "hidden" :someapp/prop2 "p1" 
+                           :otherapp/prop3 "hidden"})
+            (map-settings {:prop1 "hidden" :myapp/prop2 "visible" :prop3 "accessible"})]
+           :env :prod
+           :app-name :myapp)]
+    (are [k expected] (= expected (get s k))
+         :prop1 "visible"
+         :prop2 "visible"
+         :prop3 "accessible"
+         :prop4 nil))
+  )
 
 (deftest env-settings-test 
   (let [env (into {} (for [[k v] (System/getenv)] [(keyword k) v]))
@@ -156,4 +170,5 @@
   (let [s (edn-settings "test_bad.edn" :throw-on-failure? false)]
     (is (empty? s))))
   
+
 
