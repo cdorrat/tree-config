@@ -7,12 +7,19 @@
    [clojure.data.codec.base64 :as b64]
    [clojure.walk :as walk])
   (:import 
-   [java.net Inet4Address InetAddress NetworkInterface InterfaceAddress]
+   [java.net Inet4Address InetAddress NetworkInterface InterfaceAddress]   
    [java.util Properties Arrays]
-   [java.security SecureRandom]
+   [java.security SecureRandom KeyPairGenerator Security KeyFactory]
    [javax.crypto Cipher SecretKey SecretKeyFactory]
    [javax.crypto.spec PBEKeySpec PBEParameterSpec SecretKeySpec IvParameterSpec]
-   [javax.naming InitialContext]))
+   [java.security.spec RSAKeyGenParameterSpec X509EncodedKeySpec]
+   [org.bouncycastle.asn1.x509 SubjectPublicKeyInfo]
+   [javax.naming InitialContext]
+   [org.bouncycastle.openssl PEMWriter PEMParser PEMEncryptedKeyPair PEMKeyPair]
+   [org.bouncycastle.openssl.jcajce JcePEMDecryptorProviderBuilder JcaPEMKeyConverter]
+   [org.bouncycastle.operator.jcajce JcaContentSignerBuilder]
+   [org.bouncycastle.cert X509CertificateHolder]
+   [org.bouncycastle.asn1 DERBitString ASN1Sequence]))
  
  
 ;; (def env-subnets (atom  [[:dev "10.1.1.1/24" "172.18.39.86/25"]
@@ -81,8 +88,8 @@ If no address is suplied it will check all of the addresses of the local machine
 
 (def default-settings-vals 
   {:app-name nil
-   :enc-key "^a not so secret key7"
-   :throw-on-failure? true
+   :private-keyfile nil
+   :throw-on-failure? true   
    :env-subnets []})
 
 (defn default-settings [overrides]
@@ -99,34 +106,73 @@ If no address is suplied it will check all of the addresses of the local machine
 ;; support for encrypted properties
 (def ^{:private true :cont true}  enc-marker "enc:")
 
-(defn- create-salt []
-  (let [salt (byte-array 8)]
-    (.nextBytes (SecureRandom.) salt)
-    salt))
+(def ^:const BC-PROVIDER "BC")
 
-(defn- des-crypt [enc-key val]
-  (let [iteration-count 19
-        salt (create-salt)
-        keyspec (PBEKeySpec. (.toCharArray enc-key) salt iteration-count)
-        secret (-> (SecretKeyFactory/getInstance "PBEWithMD5AndDES")
-                   (.generateSecret keyspec))
-        cipher (doto (Cipher/getInstance (.getAlgorithm secret))
-                 (.init Cipher/ENCRYPT_MODE secret (PBEParameterSpec. salt iteration-count)))]
-    (String. (b64/encode (byte-array (concat salt (.doFinal cipher (.getBytes val "UTF8"))))))))
+(when-not (java.security.Security/getProvider BC-PROVIDER)
+ (Security/addProvider (org.bouncycastle.jce.provider.BouncyCastleProvider.)))
 
 
-(defn- des-decrypt [enc-key val]
-  (let [iteration-count 19
-        b64-decoded (b64/decode (.getBytes val "UTF8"))
-        salt (byte-array 8 b64-decoded)
-        enc-val (byte-array (drop 8 b64-decoded))
-        keyspec (PBEKeySpec. (.toCharArray enc-key) salt iteration-count)
-        secret (-> (SecretKeyFactory/getInstance "PBEWithMD5AndDES")
-                   (.generateSecret keyspec))
-        cipher (doto (Cipher/getInstance (.getAlgorithm secret))
-                 (.init Cipher/DECRYPT_MODE secret (PBEParameterSpec. salt iteration-count)))]
+(defn create-new-keypair 
+  "utility function to create a new public/private key pair for encryption"
+  [public-key-file private-key-file]  
+  (let [random (SecureRandom.)
+        spec (RSAKeyGenParameterSpec. 2048 RSAKeyGenParameterSpec/F4)
+        generator (doto (KeyPairGenerator/getInstance "RSA", BC-PROVIDER)
+                    (.initialize spec random))
+        key-pair (.generateKeyPair generator)]
+    (with-open [pub (PEMWriter. (io/writer private-key-file))]
+      (.writeObject pub (.getPrivate key-pair)))
+    (with-open [pub (PEMWriter. (io/writer public-key-file))]
+      (.writeObject pub (.getPublic key-pair)))
+    key-pair))
+
+(defn- public-key-from-cert
+  "given an X509 cert folder return the RSA public key"
+  [^SubjectPublicKeyInfo pk-info]
+  (let [xspec (-> (DERBitString. pk-info) .getBytes (X509EncodedKeySpec.))]
+    (-> (.. pk-info getAlgorithmId getObjectId getId)
+        (KeyFactory/getInstance BC-PROVIDER) 
+        (.generatePublic xspec))))
+
+(defn- load-pemfile 
+  "Load a PEM formatted key file & return either an X509 certificate (for puoblic keys)
+  or a KeyPair (for private keys) "
+  ([pem-file]
+   (load-pemfile pem-file ""))
+  ([pem-file password]
+   (with-open [pem-reader (io/reader pem-file)]
+     (let [object (.readObject (PEMParser. pem-reader))
+           keypair  #(.getKeyPair (doto (JcaPEMKeyConverter.)
+                                    (.setProvider BC-PROVIDER)) 
+                                  object)]
+       (condp instance? object
+         PEMEncryptedKeyPair (.decryptKeyPair (keypair) (-> (JcePEMDecryptorProviderBuilder.) 
+                                                            (.build password)))
+         PEMKeyPair (keypair)
+         X509CertificateHolder (public-key-from-cert (.getSubjectPublicKeyInfo object) )
+         SubjectPublicKeyInfo (public-key-from-cert object)
+         (throw (RuntimeException. (str "unknown PEM file conents from " pem-file))))))))
+
+
+(def ^:private load-public-key
+  (memoize load-pemfile))
+
+(defn- pk-crypt [public-key-file val]
+  (let  [public-key (load-public-key public-key-file)
+         cipher (doto (Cipher/getInstance "RSA/ECB/OAEPWithSHA1AndMGF1Padding" BC-PROVIDER)
+                  (.init Cipher/ENCRYPT_MODE public-key))]
+    (String. (b64/encode (byte-array (.doFinal cipher (.getBytes val "UTF8")))))))
+
+(def ^:private load-private-key 
+  (memoize (fn [private-key-pem-file]
+             (.getPrivate (load-pemfile private-key-pem-file)))))
+
+(defn- pk-decrypt [private-key-file enc-val]
+  (let [private-key  (load-private-key private-key-file)
+	cipher (doto (Cipher/getInstance "RSA/ECB/OAEPWithSHA1AndMGF1Padding" BC-PROVIDER)
+                 (.init Cipher/DECRYPT_MODE private-key))]
     (try 
-      (String. (.doFinal cipher enc-val))
+      (String. (.doFinal cipher (-> (.getBytes enc-val "UTF8") b64/decode byte-array)))
       (catch Exception e
         (log/error e "failed decoding encrypted config property: " val)
         nil))))
@@ -136,12 +182,11 @@ If no address is suplied it will check all of the addresses of the local machine
        (.startsWith val enc-marker)))
 
 (defn- decode-value [enc-key val]
-  (des-decrypt enc-key (.substring val (count enc-marker))))
+  (pk-decrypt enc-key (.substring val (count enc-marker))))
 
 (defn encode-value 
-  ([val] (encode-value (:enc-key default-settings-vals) val))
-  ([secret-key val]
-     (str enc-marker (des-crypt secret-key val))))
+  [public-key-pem-file val]
+  (str enc-marker (pk-crypt public-key-pem-file val)))
 
  (defn- decrypt-map-leaves [secret-key m]
    (walk/postwalk (fn [v]
@@ -150,12 +195,11 @@ If no address is suplied it will check all of the addresses of the local machine
                       v)) m))
 
 (defn extract-value 
-  ([val] (extract-value  (:enc-key default-settings-vals) val))
-  ([secret-key val]
-     (cond 
-      (is-encrypted? val) (decode-value secret-key val)
-      (map? val) (decrypt-map-leaves secret-key val)
-      :else val)))
+  [private-key-pem-file val]
+  (cond 
+   (is-encrypted? val) (decode-value private-key-pem-file val)
+   (map? val) (decrypt-map-leaves private-key-pem-file val)
+   :else val))
     
 ;; ===================================================================================================
 (defprotocol SettingsUtilsProtocol
@@ -195,7 +239,7 @@ If no address is suplied it will check all of the addresses of the local machine
   (or
    (when-let [found-app (find-key-with-value impl key (:env config) (app-name config))]
      (let [raw-val  (apply lookup impl found-app)
-           v (extract-value (:enc-key config) raw-val)]
+           v (extract-value (:private-keyfile config) raw-val)]
        (when (log/enabled? :debug)
          (let [{:keys [store env app-name prop-name]} (key-details impl key)]
            (log/debug (format "loaded config value: %s[%s/%s/%s] = %s " store (str env) (str app-name) (str prop-name) 
@@ -324,7 +368,7 @@ Each map has the following keys:
 (defn- find-stream 
   "Try to open a file in order of:
   a). classpath
-  b). any uri nuderstood by clojure.java.io/input-stream"
+  b). any uri understood by clojure.java.io/input-stream"
   [uri throw-on-failure?]
   (if-let [is (io/resource uri)]
     (io/input-stream is)
@@ -362,11 +406,11 @@ eg. {:global.prop \"a prop visible to everyone\"
 Params:
   file-uri - location of the edn file, first looked up in classpath then as a clojure.java.io/input-stream uri
 Options:
-   :config-key  - the project.clj key to get config values from (default :config)
-   :config-file - the leiningen project file to read (default \"project.clj\")
-   :env         - the environment
-   :app-name    - the app name (keyword or string)
-   :enc-key     - the key to use when encrypting & decrypting data"
+   :config-key      - the project.clj key to get config values from (default :config)
+   :config-file     - the leiningen project file to read (default \"project.clj\")
+   :env             - the environment
+   :app-name        - the app name (keyword or string)
+   :private-keyfile - the private key pem file used when decrypting data"
 
   [file-uri & {:as opts}]
   (let [store-name (str "edn:" file-uri)

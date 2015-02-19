@@ -3,6 +3,9 @@
             [tree-config.core :refer :all]))
 
 
+(def private-keyfile "test/sample_private_key.pem")
+(def public-keyfile "test/sample_public_key.pem")
+(def encrypted-hello (encode-value public-keyfile "hello"))
 
 (deftest scoped-name-resolution
   ;; simple.prop             - a prop name only, applied to all applications & environments
@@ -50,24 +53,24 @@
            
 (deftest map-get-value
   (let [s (map-settings {:dev/myapp.child/int-prop 17 :dev/myapp/str-prop "a str"
-                         :dev/myapp/enc-prop "enc:dleJEQVeDr5aXYsZ8L2qRw=="}
-                        :env :dev :app-name "myapp.child" :enc-key "secret")]
+                         :dev/myapp/enc-prop encrypted-hello}
+                        :env :dev :app-name "myapp.child" :private-keyfile private-keyfile)]
     (are [k expected] (= expected (get s k))
          :int-prop 17
          :str-prop "a str"
          :enc-prop "hello")))
                                           
 (deftest map-get-value-no-env 
-  (let [s (map-settings {:myapp.child/int-prop 17 :myapp/str-prop "a str" :myapp/enc-prop "enc:dleJEQVeDr5aXYsZ8L2qRw=="}
-                        :env nil :app-name "myapp.child" :enc-key "secret")]
+  (let [s (map-settings {:myapp.child/int-prop 17 :myapp/str-prop "a str" :myapp/enc-prop encrypted-hello}
+                        :env nil :app-name "myapp.child" :private-keyfile  private-keyfile )]
     (are [k expected] (= expected (get s k))
          :int-prop 17
          :str-prop "a str"
          :enc-prop "hello")))
 
 (deftest map-get-value-no-app
-  (let [s (map-settings {:int-prop 17 :str-prop "a str"  :enc-prop "enc:dleJEQVeDr5aXYsZ8L2qRw=="}
-                        :env :dev :app-name nil :enc-key "secret")]
+  (let [s (map-settings {:int-prop 17 :str-prop "a str"  :enc-prop encrypted-hello}
+                        :env :dev :app-name nil :private-keyfile  private-keyfile)]
     (are [k expected] (= expected (get s k))
          :int-prop 17
          :str-prop "a str"
@@ -75,9 +78,9 @@
 
 (deftest map-seq-test 
   (let [s (map-settings {:dev/myapp.child/int-prop 17 :dev/myapp/str-prop "a str"
-                         :dev/myapp/enc-prop "enc:dleJEQVeDr5aXYsZ8L2qRw=="
+                         :dev/myapp/enc-prop encrypted-hello
                          :test//prop.a.prop 19 :dev/ather.app/a-key 99}                         
-                        :env :dev :app-name "myapp.child" :enc-key "secret")]
+                        :env :dev :app-name "myapp.child" :private-keyfile private-keyfile)]
     (let [key-vals (seq s)
           vals (into #{} (vals s))]
       (is (= 3 (count key-vals)))
