@@ -104,7 +104,8 @@ If no address is suplied it will check all of the addresses of the local machine
 
 ;; ===================================================================================================
 ;; support for encrypted properties
-(def ^{:private true :cont true}  enc-marker "enc:")
+(def ^{:private true :cont true}  enc-marker "enc[")
+(def ^{:private true :cont true}  enc-suffix "]")
 
 (def ^:const BC-PROVIDER "BC")
 
@@ -182,11 +183,11 @@ If no address is suplied it will check all of the addresses of the local machine
        (.startsWith val enc-marker)))
 
 (defn- decode-value [enc-key val]
-  (pk-decrypt enc-key (.substring val (count enc-marker))))
+  (pk-decrypt enc-key (.substring val (count enc-marker) (- (count val) (count enc-suffix)))))
 
 (defn encode-value 
   [public-key-pem-file val]
-  (str enc-marker (pk-crypt public-key-pem-file val)))
+  (str enc-marker (pk-crypt public-key-pem-file val) enc-suffix))
 
  (defn- decrypt-map-leaves [secret-key m]
    (walk/postwalk (fn [v]
