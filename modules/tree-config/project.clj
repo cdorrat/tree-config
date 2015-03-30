@@ -1,4 +1,4 @@
-(defproject tree-config "0.2.0"
+(defproject tree-config "0.3.0"
   :description "Hierarchical configuration library for clojure"
   :url "https://github.com/cdorrat/tree-config"
   :license {:name "Eclipse Public License"

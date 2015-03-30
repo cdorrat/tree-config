@@ -2,9 +2,24 @@
   (:require [clojure.test :refer :all]
             [tree-config.core :refer :all]))
 
+;; ===================================================================================================
+;; you can generate key pairs for testign as follows
+;; 
+;; # generate a private key & strip the passphrase
+;; openssl genrsa -des3 -out private.pem 2048
+;; openssl rsa -in private.pem -out private.pem
+
+;; # generate a public key 
+;; openssl rsa -in private.pem -outform PEM -pubout -out public.pem
+
+;; # generate a self signed certificate (optional, we only need the key)
+;; openssl req -new -key private.pem  -out server.csr
+;; openssl x509 -req -days 365 -in server.csr -signkey private.pem -out server.crt
 
 (def private-keyfile "test/sample_private_key.pem")
 (def public-keyfile "test/sample_public_key.pem")
+
+
 (def encrypted-hello (encode-value public-keyfile "hello"))
 
 (deftest scoped-name-resolution

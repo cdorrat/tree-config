@@ -104,7 +104,7 @@ If no address is suplied it will check all of the addresses of the local machine
 
 ;; ===================================================================================================
 ;; support for encrypted properties
-(def ^{:private true :cont true}  enc-marker "enc[")
+(def ^{:private true :cont true}  enc-marker "ENC[")
 (def ^{:private true :cont true}  enc-suffix "]")
 
 (def ^:const BC-PROVIDER "BC")

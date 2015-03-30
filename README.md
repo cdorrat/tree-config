@@ -56,14 +56,32 @@ Sample use cases include:
 ;; encrypt a value
 (tc/encode-value "a password" "my-secret") ;; => "enc:5NRKeBHkEKAEUjdW7+Csl2bGFnOQeL/K"
 
-;; create a config instance with the correct key 
+;; create a config instance with the correct private key 
 (def config-with-secret (tc/map-settings {:the-password "enc:5NRKeBHkEKAEUjdW7+Csl2bGFnOQeL/K"
                                           :unencypyed-val "some text"}
-	                        :enc-key (slurp "/secure/file/with-the-key")))
+	                        :private-keyfile "path/to/the/private_key.pem"))
 
 ;; read the encrypted value back
 (:the-password config-with-secret ) ;; => "my-secret"
 							
+````
+## Generating key pairs for encrypted config
+
+Key pairs for encrypting config can be generated with openssl as follows:
+
+````bash
+
+# generate a private key & strip the passphrase
+openssl genrsa -des3 -out private.pem 2048
+openssl rsa -in private.pem -out private.pem
+
+# generate a public key 
+openssl rsa -in private.pem -outform PEM -pubout -out public.pem
+
+# certificates can also be used as public keys, to test this self sign a key
+openssl req -new -key private.pem  -out server.csr
+openssl x509 -req -days 365 -in server.csr -signkey private.pem -out server.crt
+
 ````
 
 ## Environment Determination
