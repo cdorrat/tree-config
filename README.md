@@ -22,6 +22,8 @@ Sample use cases include:
  
 ## Usage
 
+Add the following to your project.clj dependencies: [![Clojars Project](http://clojars.org/tree-config/latest-version.svg)](http://clojars.org/tree-config)
+
 ````clojure
 (require '[tree-config.core :as tc])
 
