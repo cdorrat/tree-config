@@ -1,4 +1,4 @@
-(defproject tree-config/lein "0.3.0"
+(defproject tree-config/lein "0.3.1"
   :description "tree-config support for reading values from leinening profiles or project files"
   :url "https://github.com/cdorrat/tree-config"
   :license {:name "Eclipse Public License"
