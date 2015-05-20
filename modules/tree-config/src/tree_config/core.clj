@@ -1,6 +1,6 @@
 (ns tree-config.core
   (:require 
-   [clojure.tools.logging :as log]
+  [clojure.tools.logging :as log]
    [clojure.string :as str]
    [clojure.edn :as edn]
    [clojure.java.io :as io]
@@ -19,7 +19,8 @@
    [org.bouncycastle.openssl.jcajce JcePEMDecryptorProviderBuilder JcaPEMKeyConverter]
    [org.bouncycastle.operator.jcajce JcaContentSignerBuilder]
    [org.bouncycastle.cert X509CertificateHolder]
-   [org.bouncycastle.asn1 DERBitString ASN1Sequence]))
+   [org.bouncycastle.asn1 DERBitString ASN1Sequence]
+   [org.bouncycastle.asn1.pkcs PrivateKeyInfo]))
  
  
 ;; (def env-subnets (atom  [[:dev "10.1.1.1/24" "172.18.39.86/25"]
@@ -135,11 +136,30 @@ If no address is suplied it will check all of the addresses of the local machine
         (KeyFactory/getInstance BC-PROVIDER) 
         (.generatePublic xspec))))
 
-(defn- load-pemfile 
+(defn- load-private-pemfile 
   "Load a PEM formatted key file & return either an X509 certificate (for puoblic keys)
   or a KeyPair (for private keys) "
   ([pem-file]
-   (load-pemfile pem-file ""))
+   (load-private-pemfile pem-file ""))
+  ([pem-file password]
+   (with-open [pem-reader (io/reader pem-file)]
+     (let [object (.readObject (PEMParser. pem-reader))
+           pem-converter (doto (JcaPEMKeyConverter.)
+                           (.setProvider BC-PROVIDER))
+           keypair  #(.getKeyPair pem-converter object)
+           private-key #(.getPrivateKey pem-converter object)]
+       (condp instance? object
+         PEMEncryptedKeyPair (.getPrivate (.decryptKeyPair (keypair) (-> (JcePEMDecryptorProviderBuilder.) 
+                                                                         (.build password))))
+         PrivateKeyInfo (private-key)
+         PEMKeyPair (.getPrivate (keypair))
+         (throw (RuntimeException. (str "unknown PEM file conents from " pem-file))))))))
+
+(defn- load-public-pemfile 
+  "Load a PEM formatted key file & return either an X509 certificate (for puoblic keys)
+  or a KeyPair (for private keys) "
+  ([pem-file]
+   (load-public-pemfile pem-file ""))
   ([pem-file password]
    (with-open [pem-reader (io/reader pem-file)]
      (let [object (.readObject (PEMParser. pem-reader))
@@ -147,16 +167,16 @@ If no address is suplied it will check all of the addresses of the local machine
                                     (.setProvider BC-PROVIDER)) 
                                   object)]
        (condp instance? object
-         PEMEncryptedKeyPair (.decryptKeyPair (keypair) (-> (JcePEMDecryptorProviderBuilder.) 
-                                                            (.build password)))
-         PEMKeyPair (keypair)
-         X509CertificateHolder (public-key-from-cert (.getSubjectPublicKeyInfo object) )
+         PEMEncryptedKeyPair (.getPublic (.decryptKeyPair (keypair) (-> (JcePEMDecryptorProviderBuilder.) 
+                                                             (.build password))))
+         PEMKeyPair (.getPublic (keypair))
+         X509CertificateHolder (public-key-from-cert (.getSubjectPublicKeyInfo object))
          SubjectPublicKeyInfo (public-key-from-cert object)
          (throw (RuntimeException. (str "unknown PEM file conents from " pem-file))))))))
 
 
 (def ^:private load-public-key
-  (memoize load-pemfile))
+  (memoize load-public-pemfile))
 
 (defn- pk-crypt [public-key-file val]
   (let  [public-key (load-public-key public-key-file)
@@ -166,7 +186,7 @@ If no address is suplied it will check all of the addresses of the local machine
 
 (def ^:private load-private-key 
   (memoize (fn [private-key-pem-file]
-             (.getPrivate (load-pemfile private-key-pem-file)))))
+             (load-private-pemfile private-key-pem-file))))
 
 (defn- pk-decrypt [private-key-file enc-val]
   (let [private-key  (load-private-key private-key-file)
