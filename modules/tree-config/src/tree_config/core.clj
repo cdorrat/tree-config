@@ -1,6 +1,9 @@
 (ns tree-config.core
-  (:require 
-  [clojure.tools.logging :as log]
+  (:require
+   [tree-config
+    [encryption :as tc-enc]
+    [rsa-encryption :as rsa-enc]]
+   [clojure.tools.logging :as log]
    [clojure.string :as str]
    [clojure.edn :as edn]
    [clojure.java.io :as io]
@@ -8,24 +11,13 @@
    [clojure.walk :as walk])
   (:import 
    [java.net Inet4Address InetAddress NetworkInterface InterfaceAddress]   
-   [java.util Properties Arrays]
-   [java.security SecureRandom KeyPairGenerator Security KeyFactory]
-   [javax.crypto Cipher SecretKey SecretKeyFactory]
-   [javax.crypto.spec PBEKeySpec PBEParameterSpec SecretKeySpec IvParameterSpec]
-   [java.security.spec RSAKeyGenParameterSpec X509EncodedKeySpec]
-   [org.bouncycastle.asn1.x509 SubjectPublicKeyInfo]
-   [javax.naming InitialContext]
-   [org.bouncycastle.openssl PEMWriter PEMParser PEMEncryptedKeyPair PEMKeyPair]
-   [org.bouncycastle.openssl.jcajce JcePEMDecryptorProviderBuilder JcaPEMKeyConverter]
-   [org.bouncycastle.operator.jcajce JcaContentSignerBuilder]
-   [org.bouncycastle.cert X509CertificateHolder]
-   [org.bouncycastle.asn1 DERBitString ASN1Sequence]
-   [org.bouncycastle.asn1.pkcs PrivateKeyInfo]))
+   [java.util Properties Arrays]))
  
  
 ;; (def env-subnets (atom  [[:dev "10.1.1.1/24" "172.18.39.86/25"]
 ;;                          [:test "10.0.1.0/24"]
 ;;                          [:prod "10.0.2.0/24"]]))
+
 
 
 ;; ===================================================================================================
@@ -89,15 +81,15 @@ If no address is suplied it will check all of the addresses of the local machine
 
 (def default-settings-vals 
   {:app-name nil
-   :private-keyfile nil
+   :encryption-strategy nil ;; something that satisfies the tc-enc/ConfigEncryptor prpotocol
    :throw-on-failure? true   
    :env-subnets []})
 
 (defn default-settings [overrides]
-  (let [merged (merge default-settings-vals overrides)]
-    (if (:env overrides)
-      merged
-      (assoc merged :env (get-env merged)))))  
+  (cond-> (merge default-settings-vals overrides)
+    (not (:env overrides))                       (#(assoc %1 :env (get-env %1)))
+    (and (:private-keyfile overrides)
+         (nil? (:encryption-strategy overrides))) (assoc :encryption-strategy (rsa-enc/rsa-encryption (:private-keyfile overrides)))))
 
 (defn- app-name [config]
   (when-let [n (:app-name config)]
@@ -108,118 +100,29 @@ If no address is suplied it will check all of the addresses of the local machine
 (def ^{:private true :cont true}  enc-marker "ENC[")
 (def ^{:private true :cont true}  enc-suffix "]")
 
-(def ^:const BC-PROVIDER "BC")
-
-(when-not (java.security.Security/getProvider BC-PROVIDER)
- (Security/addProvider (org.bouncycastle.jce.provider.BouncyCastleProvider.)))
-
-
-(defn create-new-keypair 
-  "utility function to create a new public/private key pair for encryption"
-  [public-key-file private-key-file]  
-  (let [random (SecureRandom.)
-        spec (RSAKeyGenParameterSpec. 2048 RSAKeyGenParameterSpec/F4)
-        generator (doto (KeyPairGenerator/getInstance "RSA", BC-PROVIDER)
-                    (.initialize spec random))
-        key-pair (.generateKeyPair generator)]
-    (with-open [pub (PEMWriter. (io/writer private-key-file))]
-      (.writeObject pub (.getPrivate key-pair)))
-    (with-open [pub (PEMWriter. (io/writer public-key-file))]
-      (.writeObject pub (.getPublic key-pair)))
-    key-pair))
-
-(defn- public-key-from-cert
-  "given an X509 cert folder return the RSA public key"
-  [^SubjectPublicKeyInfo pk-info]
-  (let [xspec (-> (DERBitString. pk-info) .getBytes (X509EncodedKeySpec.))]
-    (-> (.. pk-info getAlgorithmId getObjectId getId)
-        (KeyFactory/getInstance BC-PROVIDER) 
-        (.generatePublic xspec))))
-
-(defn- load-private-pemfile 
-  "Load a PEM formatted key file & return either an X509 certificate (for puoblic keys)
-  or a KeyPair (for private keys) "
-  ([pem-file]
-   (load-private-pemfile pem-file ""))
-  ([pem-file password]
-   (with-open [pem-reader (io/reader pem-file)]
-     (let [object (.readObject (PEMParser. pem-reader))
-           pem-converter (doto (JcaPEMKeyConverter.)
-                           (.setProvider BC-PROVIDER))
-           keypair  #(.getKeyPair pem-converter object)
-           private-key #(.getPrivateKey pem-converter object)]
-       (condp instance? object
-         PEMEncryptedKeyPair (.getPrivate (.decryptKeyPair (keypair) (-> (JcePEMDecryptorProviderBuilder.) 
-                                                                         (.build password))))
-         PrivateKeyInfo (private-key)
-         PEMKeyPair (.getPrivate (keypair))
-         (throw (RuntimeException. (str "unknown PEM file conents from " pem-file))))))))
-
-(defn- load-public-pemfile 
-  "Load a PEM formatted key file & return either an X509 certificate (for puoblic keys)
-  or a KeyPair (for private keys) "
-  ([pem-file]
-   (load-public-pemfile pem-file ""))
-  ([pem-file password]
-   (with-open [pem-reader (io/reader pem-file)]
-     (let [object (.readObject (PEMParser. pem-reader))
-           keypair  #(.getKeyPair (doto (JcaPEMKeyConverter.)
-                                    (.setProvider BC-PROVIDER)) 
-                                  object)]
-       (condp instance? object
-         PEMEncryptedKeyPair (.getPublic (.decryptKeyPair (keypair) (-> (JcePEMDecryptorProviderBuilder.) 
-                                                             (.build password))))
-         PEMKeyPair (.getPublic (keypair))
-         X509CertificateHolder (public-key-from-cert (.getSubjectPublicKeyInfo object))
-         SubjectPublicKeyInfo (public-key-from-cert object)
-         (throw (RuntimeException. (str "unknown PEM file conents from " pem-file))))))))
-
-
-(def ^:private load-public-key
-  (memoize load-public-pemfile))
-
-(defn- pk-crypt [public-key-file val]
-  (let  [public-key (load-public-key public-key-file)
-         cipher (doto (Cipher/getInstance "RSA/ECB/OAEPWithSHA1AndMGF1Padding" BC-PROVIDER)
-                  (.init Cipher/ENCRYPT_MODE public-key))]
-    (String. (b64/encode (byte-array (.doFinal cipher (.getBytes val "UTF8")))))))
-
-(def ^:private load-private-key 
-  (memoize (fn [private-key-pem-file]
-             (load-private-pemfile private-key-pem-file))))
-
-(defn- pk-decrypt [private-key-file enc-val]
-  (let [private-key  (load-private-key private-key-file)
-	cipher (doto (Cipher/getInstance "RSA/ECB/OAEPWithSHA1AndMGF1Padding" BC-PROVIDER)
-                 (.init Cipher/DECRYPT_MODE private-key))]
-    (try 
-      (String. (.doFinal cipher (-> (.getBytes enc-val "UTF8") b64/decode byte-array)))
-      (catch Exception e
-        (log/error e "failed decoding encrypted config property: " val)
-        nil))))
-
 (defn- is-encrypted? [val]
   (and (string? val)
        (.startsWith val enc-marker)))
 
-(defn- decode-value [enc-key val]
-  (pk-decrypt enc-key (.substring val (count enc-marker) (- (count val) (count enc-suffix)))))
+(defn- decode-value [enc-strat val]
+  (tc-enc/decrypt enc-strat (.substring val (count enc-marker) (- (count val) (count enc-suffix)))))
 
-(defn encode-value 
-  [public-key-pem-file val]
-  (str enc-marker (pk-crypt public-key-pem-file val) enc-suffix))
+(defn encode-value
+  "Given an encryption streategy (somethig that satisfies tree-config.encryption/ConfigEncryptor) encode a value"
+  [enc-strat val]
+  (str enc-marker (tc-enc/encrypt enc-strat val) enc-suffix))
 
- (defn- decrypt-map-leaves [secret-key m]
+ (defn- decrypt-map-leaves [enc-strat m]
    (walk/postwalk (fn [v]
                     (if (is-encrypted? v)
-                      (decode-value secret-key v)
+                      (decode-value enc-strat v)
                       v)) m))
 
 (defn extract-value 
-  [private-key-pem-file val]
+  [enc-strat val]
   (cond 
-   (is-encrypted? val) (decode-value private-key-pem-file val)
-   (map? val) (decrypt-map-leaves private-key-pem-file val)
+   (is-encrypted? val) (decode-value enc-strat val)
+   (map? val) (decrypt-map-leaves enc-strat val)
    :else val))
     
 ;; ===================================================================================================
@@ -260,7 +163,7 @@ If no address is suplied it will check all of the addresses of the local machine
   (or
    (when-let [found-app (find-key-with-value impl key (:env config) (app-name config))]
      (let [raw-val  (apply lookup impl found-app)
-           v (extract-value (:private-keyfile config) raw-val)]
+           v (extract-value (:encryption-strategy config) raw-val)]
        (when (log/enabled? :debug)
          (let [{:keys [store env app-name prop-name]} (key-details impl key)]
            (log/debug (format "loaded config value: %s[%s/%s/%s] = %s " store (str env) (str app-name) (str prop-name) 
@@ -427,11 +330,12 @@ eg. {:global.prop \"a prop visible to everyone\"
 Params:
   file-uri - location of the edn file, first looked up in classpath then as a clojure.java.io/input-stream uri
 Options:
-   :config-key      - the project.clj key to get config values from (default :config)
-   :config-file     - the leiningen project file to read (default \"project.clj\")
-   :env             - the environment
-   :app-name        - the app name (keyword or string)
-   :private-keyfile - the private key pem file used when decrypting data"
+   :config-key          - the project.clj key to get config values from (default :config)
+   :config-file         - the leiningen project file to read (default \"project.clj\")
+   :env                 - the environment
+   :app-name            - the app name (keyword or string)
+   :private-keyfile     - the private key pem file used when decrypting data (if using the default rsa encryption scheme)
+   :encryption-strategy - something that satisfies the tree-config/ConfigEncryptor protocol, when specified :private-keyfile will be ignored"
 
   [file-uri & {:as opts}]
   (let [store-name (str "edn:" file-uri)
@@ -485,4 +389,4 @@ Options:
   "Return a config instance that returns the first match from a collection of config files.
   any options will be applied to all the chained settings instances (eg. app-name or env) "
   [delegates & {:as opts}]
-  (ChainedSettings. (merge default-settings-vals opts) delegates))
+  (ChainedSettings. (default-settings opts) delegates))

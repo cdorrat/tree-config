@@ -1,6 +1,9 @@
 (ns tree-config.core-test
   (:require [clojure.test :refer :all]
-            [tree-config.core :refer :all]))
+            [tree-config
+             [core :refer :all]
+             [encryption :as tc-enc]
+             [rsa-encryption :as rsa-enc]]))
 
 ;; ===================================================================================================
 ;; you can generate key pairs for testign as follows
@@ -19,8 +22,7 @@
 (def private-keyfile "test/sample_private_key.pem")
 (def public-keyfile "test/sample_public_key.pem")
 
-
-(def encrypted-hello (encode-value public-keyfile "hello"))
+(def encrypted-hello (encode-value (rsa-enc/rsa-encryption public-keyfile nil) "hello"))
 
 (deftest scoped-name-resolution
   ;; simple.prop             - a prop name only, applied to all applications & environments
@@ -187,6 +189,21 @@
 
   (let [s (edn-settings "test_bad.edn" :throw-on-failure? false)]
     (is (empty? s))))
-  
 
+(defn- reverse-str [a-str]
+  (apply str (reverse a-str)))
 
+(defrecord ReverseEnc []
+  tc-enc/ConfigEncryptor
+  (encrypt [_ plain-text]
+    (reverse-str plain-text))
+  (decrypt [this cipher-text]
+    (reverse-str cipher-text)))
+
+(deftest can-specify-encryption-strategies
+  (let [enc-strat (->ReverseEnc)
+        plaintext "my secret text"
+        cipher-text (encode-value enc-strat plaintext)
+        cfg (map-settings {:secret cipher-text} :encryption-strategy enc-strat)]
+    (is (not= plaintext cipher-text))
+    (is (= plaintext (:secret cfg)))))
