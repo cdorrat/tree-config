@@ -1,4 +1,4 @@
-(ns rsa-encryption-test
+(ns tree-config.rsa-encryption-test
   (:require [clojure.test :refer :all]
             [tree-config
              [encryption :as tc-enc]
