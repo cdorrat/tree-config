@@ -1,1 +1,0 @@
-([:dependencies ([cider/cider-nrepl "0.8.2"] [org.clojure/clojure "1.6.0" :scope "provided"] [tree-config/tree-config "0.3.2"] [com.nimbusds/nimbus-jose-jwt "3.10"] [org.clojure/tools.nrepl "0.2.6" :exclusions ([org.clojure/clojure]) :scope "test"] [clojure-complete/clojure-complete "0.2.3" :exclusions ([org.clojure/clojure]) :scope "test"])])
