@@ -28,7 +28,9 @@
     (jwe-decrypt private-key cipher-text)))
 
 (defn jwe-encryption
-  "Create a new JWE encryption strategy, expects a pem formatter private key for decryption & either a pem formatted public key or x509 certificate for encryption"
+  "Create a new JWE encryption strategy, expects a pem formatter private key for decryption & either a pem formatted public key or x509 certificate for encryption.
+ Optionally taks a map with :alg and :enc keys to set the JWE key algorithm and encryption algorithm, defaults to 
+ RSA-OAEP adn A128GCM, see Readme.md for a full list of supported algorithms"
   ([private-key-filename]
    (jwe-encryption nil private-key-filename {}))
   ([public-key-filename private-key-filename]
