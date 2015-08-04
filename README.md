@@ -117,7 +117,10 @@ The workaround is to exclude the bouncy castle jars from your uberjar, update th
 The following project.clj shows how to do this:
 
 ````clojure
-    ;; create a profile with just the bouncy castle jars we'll use with libcopy
+    ;; add the libdir plugin we'll use to copy jars
+    :plugins [[lein-libdir "0.1.1"]]
+	
+    ;; create a profile with just the bouncy castle jars we'll use with libcopy 
     :profiles {:bouncy-castle {:dependencies ^:replace [[org.bouncycastle/bcprov-jdk15on "1.52"]
                                                         [org.bouncycastle/bcpkix-jdk15on "1.52"]
                                                         [org.bouncycastle/bcprov-ext-jdk15on "1.52"]]}									   }
