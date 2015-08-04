@@ -105,6 +105,37 @@ Subnets may be sepcified as follows:
                   [:prod "10.0.2.0/24"]])
 ````
 
+## Using lein uberjar with  encryption
+
+By default Tree config uses bouncy castle for encryption, when included in an uberjar you'll get an error similar to the following:
+
+````
+Exception in thread "main" java.lang.SecurityException: JCE cannot authenticate the provider BC
+````
+
+The workaround is to exclude the bouncy castle jars from your uberjar, update the manifest to reference the bouncy castle jars and ship them in their own jars.
+The following project.clj shows how to do this:
+
+````clojure
+    ;; create a profile with just the bouncy castle jars we'll use with libcopy
+    :profiles {:bouncy-castle {:dependencies ^:replace [[org.bouncycastle/bcprov-jdk15on "1.52"]
+                                                        [org.bouncycastle/bcpkix-jdk15on "1.52"]
+                                                        [org.bouncycastle/bcprov-ext-jdk15on "1.52"]]}									   }
+
+    ;; now we'll add all jars starting with bcp to the manifest for generated jars
+    :manifest {"Class-Path" ~#(->> % 
+                                 leiningen.core.classpath/get-classpath
+                                 (map (fn [jar-path] (.getName (java.io.File. jar-path))))
+                                 (filter (fn [jar-name] (.startsWith jar-name "bcp")))
+                                 (clojure.string/join \space))}
+								 
+    ;; we'll use the libdir plugin to copy the requred jars to target
+    :libdir-path "target"
+
+	;; running `lein with-profile bouncy-castle libdir` will copy the bouncy castle jars to target
+````
+
+
 ## License
 
 Copyright © 2013 Cameorn Dorrat
