@@ -261,6 +261,9 @@ Each map has the following keys:
 ;; ===================================================================================================
 ;; in memory map based implementation
 
+(defn- most-specific-key [config the-key]
+  (keyword (prop-key-name (:env config) (:app-name config) the-key)))
+
 (defsettings MapSettings [config m]
   SettingsProtocol
   (has? [_ env app-name key]
@@ -269,7 +272,26 @@ Each map has the following keys:
           (get m (keyword (prop-key-name env app-name key))))
   (prop-names [settings env app-name]
               (distinct (map #(-> % key-name keyword) (keys m))))
-  (store-name [_] (or (:store-name config) "map-config")))
+  (store-name [_] (or (:store-name config) "map-config"))
+
+  clojure.lang.IPersistentMap
+  (assoc [_ a-key a-val]
+         (MapSettings. config (.assoc m (most-specific-key config a-key) a-val)))
+  (assocEx [_  a-key  a-val]
+           (MapSettings. config (.assocEx m  (most-specific-key config a-key) a-val)))  
+  (without [_ a-key]
+           (MapSettings. config
+                         (apply dissoc m (for [[env app-name kname] (keys-to-search (:env config) (:app-name config) a-key)]
+                                           (keyword (prop-key-name env app-name kname))))))
+  clojure.lang.IPersistentCollection
+  (count [_]
+         (count m))
+  (cons [_ o]
+        (MapSettings. config (.cons m o)))
+  (empty [_]
+         (MapSettings. config {}))  
+  (equiv [_ o]
+         (.equiv m o)))
 
 (defn map-settings [m & {:as opts}]
   (MapSettings. (default-settings opts) m))

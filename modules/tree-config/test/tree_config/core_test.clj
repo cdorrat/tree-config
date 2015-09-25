@@ -93,6 +93,32 @@
          :str-prop "a str"
          :enc-prop "hello")))
 
+(deftest map-update-key-val
+  (let [s (map-settings {:dev//a 1 :dev/app-name/a 2 :a 3 :b 19}
+                        :env :dev :app-name nil :private-keyfile  private-keyfile)]
+    (are [k expected] (= expected (get (assoc s :a 99) k))
+         :a 99
+         :b 19)))
+
+(deftest map-merges
+  (let [s1 (map-settings {:a 1 :b 2 :c 4} :env :dev :app-name nil :private-keyfile  private-keyfile)
+        s2 (map-settings {:a 5 :b 6 :d 7} :env :dev :app-name nil :private-keyfile  private-keyfile)
+        merged (merge s1 s2)]
+    (are [k expected] (= expected (get merged k))
+         :a 5
+         :b 6
+         :c 4
+         :d 7)))
+
+(deftest map-dissoc
+  (let [s (map-settings {:dev//a 1 :dev/app-name/a 2 :a 3 :dev//b 76 :b 19 :c 17}
+                        :env :dev :app-name nil :private-keyfile  private-keyfile)]
+    (are [k expected] (= expected (get (dissoc s :a :c) k))
+         :a nil
+         :b 76
+         :c nil)))
+
+
 (deftest map-seq-test 
   (let [s (map-settings {:dev/myapp.child/int-prop 17 :dev/myapp/str-prop "a str"
                          :dev/myapp/enc-prop encrypted-hello
