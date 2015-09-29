@@ -160,16 +160,15 @@ If no address is suplied it will check all of the addresses of the local machine
 (defn fetch-value 
   "lookup a value, searching ancestors and decrypting values as necessary"
   [impl config key & default]
-  (or
-   (when-let [found-app (find-key-with-value impl key (:env config) (app-name config))]
-     (let [raw-val  (apply lookup impl found-app)
-           v (extract-value (:encryption-strategy config) raw-val)]
-       (when (log/enabled? :debug)
-         (let [{:keys [store env app-name prop-name]} (key-details impl key)]
-           (log/debug (format "loaded config value: %s[%s/%s/%s] = %s " store (str env) (str app-name) (str prop-name) 
-                                (str raw-val)))))
-       v))
-   (first default)))
+  (if-let [found-app (find-key-with-value impl key (:env config) (app-name config))]
+    (let [raw-val  (apply lookup impl found-app)
+          v (extract-value (:encryption-strategy config) raw-val)]
+      (when (log/enabled? :debug)
+        (let [{:keys [store env app-name prop-name]} (key-details impl key)]
+          (log/debug (format "loaded config value: %s[%s/%s/%s] = %s " store (str env) (str app-name) (str prop-name) 
+                             (str raw-val)))))
+      v)
+    (first default)))
 
 (defmacro defsettings 
   "This macro provides implmentations of all the clojure interfaces required to make our settings look like a map (IFn, IAssociative, ILookup,...)

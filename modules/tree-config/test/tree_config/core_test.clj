@@ -118,6 +118,12 @@
          :b 76
          :c nil)))
 
+(deftest map-settings-can-loopup-false-values
+  (let [s (map-settings {:a false}
+                        :env :dev :app-name nil :private-keyfile  private-keyfile)]
+    (is (= false (:a s)))
+    (is (contains? s :a))
+    (is (= :a (ffirst (seq s))))))
 
 (deftest map-seq-test 
   (let [s (map-settings {:dev/myapp.child/int-prop 17 :dev/myapp/str-prop "a str"
