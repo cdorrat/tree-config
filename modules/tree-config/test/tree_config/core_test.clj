@@ -126,10 +126,17 @@
     (is (= :a (ffirst (seq s))))))
 
 (deftest map-can-use-into
-  (let [res (into {:a 1} (map-settings {:b 2}
-                                       :env :dev :app-name nil :private-keyfile  private-keyfile))]
-    (is (= 1 (:a res)))
-    (is (= 2 (:b res)))))
+  (let [map-target (into {:a 1} (map-settings {:b 2}
+                                              :env :dev :app-name nil :private-keyfile  private-keyfile))]
+    (is (= 1 (:a map-target)))
+    (is (= 2 (:b map-target))))
+
+  (let [conf-target (into (map-settings {:b 2}
+                                        :env :dev :app-name nil :private-keyfile  private-keyfile)
+                          {:a 1})]
+    (is (= 1 (:a conf-target)))
+    (is (= 2 (:b conf-target)))
+    (is (instance? tree_config.core.MapSettings conf-target))))
 
 
 (deftest map-seq-test 
