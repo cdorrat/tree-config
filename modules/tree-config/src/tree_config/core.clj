@@ -273,6 +273,16 @@ Each map has the following keys:
               (distinct (map #(-> % key-name keyword) (keys m))))
   (store-name [_] (or (:store-name config) "map-config"))
 
+  clojure.core.protocols.CollReduce
+  (coll-reduce [coll f]
+               (clojure.core.protocols/coll-reduce m f))
+  (coll-reduce [coll f val]
+               (clojure.core.protocols/coll-reduce m f val))
+
+  clojure.core.protocols.IKVReduce
+  (kv-reduce [amap f init]
+             (clojure.core.protocols/kv-reduce m f init))
+  
   clojure.lang.IPersistentMap
   (assoc [_ a-key a-val]
          (MapSettings. config (.assoc m (most-specific-key config a-key) a-val)))

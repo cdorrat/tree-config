@@ -125,6 +125,13 @@
     (is (contains? s :a))
     (is (= :a (ffirst (seq s))))))
 
+(deftest map-can-use-into
+  (let [res (into {:a 1} (map-settings {:b 2}
+                                       :env :dev :app-name nil :private-keyfile  private-keyfile))]
+    (is (= 1 (:a res)))
+    (is (= 2 (:b res)))))
+
+
 (deftest map-seq-test 
   (let [s (map-settings {:dev/myapp.child/int-prop 17 :dev/myapp/str-prop "a str"
                          :dev/myapp/enc-prop encrypted-hello
