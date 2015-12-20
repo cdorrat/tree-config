@@ -1,4 +1,4 @@
-(defproject tree-config "0.3.3"
+(defproject tree-config "0.3.4-SNAPSHOT"
   :description "Hierarchical configuration library for clojure"
   :url "https://github.com/cdorrat/tree-config"
   :license {:name "Eclipse Public License"
@@ -7,7 +7,7 @@
                  [org.clojure/tools.logging "0.2.6"]
                  [org.clojure/data.codec "0.1.0"]]
   :profiles {:provided
-             {:dependencies [[org.bouncycastle/bcprov-jdk15on "1.52"]
-                             [org.bouncycastle/bcpkix-jdk15on "1.52"]]}} 
+             {:dependencies [[org.bouncycastle/bcprov-jdk15on "1.53"]
+                             [org.bouncycastle/bcpkix-jdk15on "1.53"]]}} 
   :scm {:name "git"
          :url "https://github.com/cdorrat/tree-config.git"})

@@ -43,7 +43,7 @@
   "given an X509 cert folder return the RSA public key"
   [^SubjectPublicKeyInfo pk-info]
   (let [xspec (-> (DERBitString. pk-info) .getBytes (X509EncodedKeySpec.))]
-    (-> (.. pk-info getAlgorithmId getObjectId getId)
+    (-> (.. pk-info getAlgorithmId getAlgorithm getId)
         (KeyFactory/getInstance BC-PROVIDER) 
         (.generatePublic xspec))))
 
