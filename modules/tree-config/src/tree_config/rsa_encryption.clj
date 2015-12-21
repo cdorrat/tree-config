@@ -23,7 +23,9 @@
 (def ^:const BC-CIPHER "RSA/ECB/OAEPWithSHA1AndMGF1Padding")
 
 (when-not (java.security.Security/getProvider BC-PROVIDER)
- (Security/addProvider (org.bouncycastle.jce.provider.BouncyCastleProvider.)))
+  (Security/addProvider (org.bouncycastle.jce.provider.BouncyCastleProvider.))
+  (.. (Runtime/getRuntime)
+      (addShutdownHook (java.lang.Thread. #(Security/removeProvider BC-PROVIDER)))))
 
 (defn create-new-keypair 
   "utility function to create a new public/private key pair for encryption"

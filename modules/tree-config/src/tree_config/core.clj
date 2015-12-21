@@ -273,6 +273,18 @@ Each map has the following keys:
               (distinct (map #(-> % key-name keyword) (keys m))))
   (store-name [_] (or (:store-name config) "map-config"))
 
+
+  java.lang.Iterable
+  (iterator [coll]
+            (let [s (atom (seq coll))]
+              (proxy [java.util.Iterator] []
+                (hasNext [] (not (empty? @s)))
+                (next []
+                  (let [e (first @s)]
+                    (swap! s rest)
+                    e))
+                (remove []))))  
+  
   clojure.core.protocols.CollReduce
   (coll-reduce [coll f]
                (clojure.core.protocols/coll-reduce m f))
@@ -302,7 +314,7 @@ Each map has the following keys:
   (equiv [_ o]
          (.equiv m o)))
 
-(defn map-settings [m & {:as opts}]
+(defn map-settings [m & {:as opts}]  
   (MapSettings. (default-settings opts) m))
     
 ;; ===================================================================================================

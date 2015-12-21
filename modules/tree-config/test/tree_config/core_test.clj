@@ -1,5 +1,6 @@
 (ns tree-config.core-test
   (:require [clojure.test :refer :all]
+            [collection-check :refer :all]
             [tree-config
              [core :refer :all]
              [encryption :as tc-enc]
@@ -253,3 +254,6 @@
         cfg (map-settings {:secret cipher-text} :encryption-strategy enc-strat)]
     (is (not= plaintext cipher-text))
     (is (= plaintext (:secret cfg)))))
+
+
+
