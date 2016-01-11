@@ -7,7 +7,7 @@
             XMLConfiguration
             ]))
 
-(ct/defsettings CommonsConfiguration [iname inst ]
+(ct/defsettings CommonsConfiguration [config iname inst ]
   ct/SettingsProtocol
   (has? [_ env app-name key]
     (.containsKey inst (name key)))
@@ -24,13 +24,15 @@
        (or (some-> (io/file filename) .getName)
            (str filename))))
 
-(defn properties-config [filename]
-  (->CommonsConfiguration (config-instance-name  "props" filename)
+(defn properties-config [filename & {:as opts}]
+  (->CommonsConfiguration (ct/default-settings opts)
+                          (config-instance-name  "props" filename)
                           (PropertiesConfiguration. filename)))
 
-(defn xml-config [filename]
-  (->CommonsConfiguration (config-instance-name "xml" filename)
+(defn xml-config [filename & {:as opts}]
+  (->CommonsConfiguration (ct/default-settings opts)
+                          (config-instance-name "xml" filename)
                           (XMLConfiguration. filename)))
 
-(defn commons-config [^Configuration config]
-  (->CommonsConfiguration "commons-config" config))
+(defn commons-config [^Configuration config & {:as opts}]
+  (->CommonsConfiguration (ct/default-settings opts) "commons-config" config))

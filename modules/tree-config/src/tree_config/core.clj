@@ -91,7 +91,7 @@ If no address is suplied it will check all of the addresses of the local machine
     (and (:private-keyfile overrides)
          (nil? (:encryption-strategy overrides))) (assoc :encryption-strategy (rsa-enc/rsa-encryption (:private-keyfile overrides)))))
 
-(defn app-name [config]
+(defn- app-name [config]
   (when-let [n (:app-name config)]
     (name n)))
 
