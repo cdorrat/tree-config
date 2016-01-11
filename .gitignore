@@ -15,3 +15,5 @@ pom.xml.asc
 /modules/tree-config/.nrepl-port
 /modules/tree-config-lein/.nrepl-port
 /.nrepl-port
+/modules/tree-config-apache-config/.nrepl-port
+/modules/tree-config-apache-config/target/

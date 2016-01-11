@@ -1,10 +1,10 @@
-(defproject tree-config "0.3.4"
+(defproject tree-config "0.3.5"
   :description "Hierarchical configuration library for clojure"
   :url "https://github.com/cdorrat/tree-config"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.5.1"]]
-  :sub ["modules/tree-config" "modules/tree-config-lein" "modules/tree-config-jwe"]
+  :sub ["modules/tree-config" "modules/tree-config-lein" "modules/tree-config-jwe" "modules/tree-config-apache-config"]
   :plugins [[lein-sub "0.3.0"]]
   :scm {:name "git"
          :url "https://github.com/cdorrat/tree-config.git"})
