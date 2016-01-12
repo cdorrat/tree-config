@@ -1,4 +1,4 @@
-(defproject tree-config/jwe "0.3.5"
+(defproject tree-config/jwe "0.3.6"
   :description "tree-config support for reading JWE formatted encrypted values"
   :url "https://github.com/cdorrat/tree-config"
   :license {:name "Eclipse Public License"
