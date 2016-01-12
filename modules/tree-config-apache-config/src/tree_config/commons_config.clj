@@ -10,9 +10,9 @@
 (ct/defsettings CommonsConfiguration [config iname inst ]
   ct/SettingsProtocol
   (has? [_ env app-name key]
-    (.containsKey inst (name key)))
+    (.containsKey inst (ct/prop-key-name env app-name key)))
   (lookup [_ env app-name key]
-    (.getString inst (name key)))
+    (.getString inst (ct/prop-key-name env app-name key)))
   (prop-names [_ env app-name]
     (->> (.getKeys inst)
         iterator-seq

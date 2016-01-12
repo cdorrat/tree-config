@@ -245,7 +245,7 @@ Each map has the following keys:
          (when (or (has-value app-name) (has-value env))
            (str app-name key-delim)))))
 
-(defn- prop-key-name [env app-name k]
+(defn prop-key-name [env app-name k]
   (str (prop-key-prefix env app-name) (name k)))
 
 (defn- key-name 
