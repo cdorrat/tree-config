@@ -419,7 +419,10 @@ Options:
   (has? [_ env app-name key]
         (some #(has? % env app-name key) delegates))
   (lookup [settings env app-name key]
-        (some #(lookup % env app-name key) delegates))
+          (->> delegates              
+               (filter #(has? % env app-name key))
+               first
+               (#(lookup % env app-name key))))  
   (prop-names [settings env app-name]
               (into #{} (mapcat #(prop-names % env app-name) (reverse delegates))))
   (store-name [_] "chained-config")

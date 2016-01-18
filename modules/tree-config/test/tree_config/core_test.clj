@@ -257,3 +257,11 @@
 
 
 
+(deftest chain-settings-can-overide-with-false-values
+  (let [s (chained-settings 
+           [(map-settings {:prop1 false})
+            (map-settings {:prop1 true})]
+           :env :prod
+           :app-name :myapp)]
+    (is (= false (get s :prop1))))
+  ) 
