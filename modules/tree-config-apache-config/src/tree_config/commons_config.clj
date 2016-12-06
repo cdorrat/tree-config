@@ -12,7 +12,11 @@
   (has? [_ env app-name key]
     (.containsKey inst (ct/prop-key-name env app-name key)))
   (lookup [_ env app-name key]
-    (.getString inst (ct/prop-key-name env app-name key)))
+          (let [l (.getList inst (ct/prop-key-name env app-name key))]
+            (cond
+              (empty? l) nil
+              (= 1 (count l)) (first l)
+              :else l)))
   (prop-names [_ env app-name]
     (->> (.getKeys inst)
         iterator-seq
